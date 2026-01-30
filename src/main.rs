@@ -50,6 +50,7 @@ enum OutputFormat {
 struct Config {
     branches: BranchConfig,
     commits: CommitConfig,
+    checks: CheckConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,10 +63,17 @@ struct CommitConfig {
     convention: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct CheckConfig {
+    require_clean_worktree: bool,
+    require_upstream: bool,
+}
+
 #[derive(Debug, Serialize)]
 struct Report {
     branch: BranchReport,
     commits: Vec<CommitReport>,
+    repo: RepoReport,
     summary: Summary,
 }
 
@@ -88,6 +96,14 @@ struct Summary {
     total_commits: usize,
     invalid_commits: usize,
     branch_valid: bool,
+    worktree_clean: bool,
+    upstream_set: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct RepoReport {
+    worktree_clean: bool,
+    upstream_set: bool,
 }
 
 fn main() -> Result<()> {
@@ -149,6 +165,14 @@ fn fix(config_path: &Path, commit_limit: usize) -> Result<()> {
         );
     }
 
+    if !report.repo.worktree_clean {
+        println!("- Clean working tree: git status (commit or stash changes)");
+    }
+
+    if !report.repo.upstream_set {
+        println!("- Set upstream: git push -u origin {}", report.branch.name);
+    }
+
     for commit in report.commits.iter().filter(|c| !c.valid) {
         println!(
             "- Fix commit {}: git rebase -i --reword {}^",
@@ -156,7 +180,11 @@ fn fix(config_path: &Path, commit_limit: usize) -> Result<()> {
         );
     }
 
-    if report.branch.valid && report.commits.iter().all(|c| c.valid) {
+    if report.branch.valid
+        && report.commits.iter().all(|c| c.valid)
+        && report.repo.worktree_clean
+        && report.repo.upstream_set
+    {
         println!("- No fixes needed. You're good to go!");
     }
 
@@ -168,6 +196,9 @@ fn build_report(config: &Config, commit_limit: usize) -> Result<Report> {
     let branch_regex = Regex::new(&config.branches.pattern)
         .with_context(|| format!("invalid branch regex {}", config.branches.pattern))?;
     let branch_valid = branch_regex.is_match(&branch_name);
+
+    let worktree_clean = !config.checks.require_clean_worktree || git_worktree_clean()?;
+    let upstream_set = !config.checks.require_upstream || git_has_upstream()?;
 
     let commit_regex = commit_regex_for(&config.commits.convention)?;
     let commits = git_recent_commits(commit_limit)?;
@@ -189,10 +220,16 @@ fn build_report(config: &Config, commit_limit: usize) -> Result<Report> {
             valid: branch_valid,
         },
         commits: commit_reports,
+        repo: RepoReport {
+            worktree_clean,
+            upstream_set,
+        },
         summary: Summary {
             total_commits: commit_reports.len(),
             invalid_commits,
             branch_valid,
+            worktree_clean,
+            upstream_set,
         },
     })
 }
@@ -213,7 +250,12 @@ fn print_text_report(report: &Report) {
     }
 
     println!(
-        "\nSummary: branch_ok={}, invalid_commits={}",
+        "\nRepo: worktree_clean={}, upstream_set={}",
+        report.repo.worktree_clean, report.repo.upstream_set
+    );
+
+    println!(
+        "Summary: branch_ok={}, invalid_commits={}",
         report.summary.branch_valid, report.summary.invalid_commits
     );
 }
@@ -238,6 +280,10 @@ fn default_config() -> Config {
         },
         commits: CommitConfig {
             convention: "conventional".to_string(),
+        },
+        checks: CheckConfig {
+            require_clean_worktree: true,
+            require_upstream: true,
         },
     }
 }
@@ -293,4 +339,23 @@ fn git_recent_commits(limit: usize) -> Result<Vec<(String, String)>> {
         .collect();
 
     Ok(commits)
+}
+
+fn git_worktree_clean() -> Result<bool> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()
+        .context("git status")?;
+    if !output.status.success() {
+        bail!("Failed to read git status");
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
+fn git_has_upstream() -> Result<bool> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+        .output()
+        .context("git upstream")?;
+    Ok(output.status.success())
 }

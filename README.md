@@ -12,7 +12,7 @@ git-sherpa init
 ```
 
 ### check
-Analyzes the current branch and recent commits.
+Analyzes the current branch, recent commits, and repo hygiene.
 
 ```bash
 git-sherpa check
@@ -35,6 +35,10 @@ pattern = "^(feat|fix|chore|docs|refactor)/[a-z0-9-]+$"
 
 [commits]
 convention = "conventional"
+
+[checks]
+require_clean_worktree = true
+require_upstream = true
 ```
 
 ## Roadmap
