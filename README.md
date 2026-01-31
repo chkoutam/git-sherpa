@@ -1,6 +1,12 @@
-# git-sherpa
+<p align="center">
+  <img src=".github/logo.svg" alt="git-sherpa" width="480"/>
+</p>
 
-[![CI](https://github.com/chkoutam/git-sherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/chkoutam/git-sherpa/actions/workflows/ci.yml)
+<p align="center">
+  <a href="https://github.com/chkoutam/git-sherpa/actions/workflows/ci.yml"><img src="https://github.com/chkoutam/git-sherpa/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/language-Rust-orange?logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
+</p>
 
 A Rust CLI to standardize Git hygiene across GitHub and GitLab repositories.
 

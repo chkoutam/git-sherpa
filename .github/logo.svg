@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="480" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="mountain" x1="30" y1="30" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="120" rx="16" fill="url(#bg)"/>
+  <!-- Mountain icon -->
+  <path d="M40 85 L60 40 L80 85 Z" fill="url(#mountain)" opacity="0.9"/>
+  <path d="M55 85 L75 50 L95 85 Z" fill="url(#mountain)" opacity="0.6"/>
+  <!-- Snow cap -->
+  <path d="M55 52 L60 40 L65 52 Z" fill="white" opacity="0.8"/>
+  <!-- Text -->
+  <text x="115" y="62" font-family="monospace, Consolas, 'Courier New'" font-size="36" font-weight="bold" fill="white">git-sherpa</text>
+  <text x="115" y="88" font-family="sans-serif, Arial" font-size="14" fill="#94a3b8">Git hygiene assistant</text>
+</svg>
