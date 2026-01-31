@@ -141,12 +141,41 @@ fn print_json_report(report: &Report) -> Result<()> {
     Ok(())
 }
 
-fn commit_regex_for(convention: &str) -> Result<Regex> {
+pub(crate) fn commit_regex_for(convention: &str) -> Result<Regex> {
     match convention {
         "conventional" => Regex::new(
             r"^(feat|fix|chore|docs|refactor|test|perf|ci|build)(\([a-z0-9-]+\))?: .+",
         )
         .context("invalid conventional commit regex"),
         _ => bail!("Unsupported commit convention: {}", convention),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_conventional_commits() {
+        let re = commit_regex_for("conventional").unwrap();
+        assert!(re.is_match("feat: add login"));
+        assert!(re.is_match("fix(auth): resolve token issue"));
+        assert!(re.is_match("chore: cleanup"));
+        assert!(re.is_match("docs: update readme"));
+        assert!(re.is_match("refactor(core): simplify logic"));
+    }
+
+    #[test]
+    fn invalid_conventional_commits() {
+        let re = commit_regex_for("conventional").unwrap();
+        assert!(!re.is_match("added login"));
+        assert!(!re.is_match("Fix bug"));
+        assert!(!re.is_match("random message"));
+        assert!(!re.is_match(""));
+    }
+
+    #[test]
+    fn unknown_convention_returns_error() {
+        assert!(commit_regex_for("unknown").is_err());
     }
 }

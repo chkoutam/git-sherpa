@@ -47,3 +47,43 @@ pub fn default_config() -> Config {
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_values() {
+        let cfg = default_config();
+        assert_eq!(cfg.commits.convention, "conventional");
+        assert!(cfg.checks.require_clean_worktree);
+        assert!(cfg.checks.require_upstream);
+        assert!(!cfg.branches.pattern.is_empty());
+    }
+
+    #[test]
+    fn valid_toml_parses() {
+        let toml_str = r#"
+[branches]
+pattern = "^main$"
+
+[commits]
+convention = "conventional"
+
+[checks]
+require_clean_worktree = false
+require_upstream = false
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.branches.pattern, "^main$");
+        assert_eq!(cfg.commits.convention, "conventional");
+        assert!(!cfg.checks.require_clean_worktree);
+        assert!(!cfg.checks.require_upstream);
+    }
+
+    #[test]
+    fn invalid_toml_returns_error() {
+        let bad = "not valid toml [[[";
+        assert!(toml::from_str::<Config>(bad).is_err());
+    }
+}

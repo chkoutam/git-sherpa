@@ -8,7 +8,7 @@ use crate::git;
 
 const HOOK_MARKER: &str = "# git-sherpa";
 
-fn hook_content() -> String {
+pub(crate) fn hook_content() -> String {
     format!("#!/bin/sh\n{}\nexec git-sherpa check\n", HOOK_MARKER)
 }
 
@@ -65,4 +65,24 @@ pub fn uninstall() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hook_content_has_shebang() {
+        assert!(hook_content().starts_with("#!/bin/sh\n"));
+    }
+
+    #[test]
+    fn hook_content_has_marker() {
+        assert!(hook_content().contains("# git-sherpa"));
+    }
+
+    #[test]
+    fn hook_content_has_exec() {
+        assert!(hook_content().contains("exec git-sherpa check"));
+    }
 }
