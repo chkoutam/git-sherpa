@@ -8,6 +8,10 @@ pub struct Config {
     pub branches: BranchConfig,
     pub commits: CommitConfig,
     pub checks: CheckConfig,
+    #[serde(default)]
+    pub sensitive: SensitiveConfig,
+    #[serde(default)]
+    pub hooks: HooksConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,6 +28,32 @@ pub struct CommitConfig {
 pub struct CheckConfig {
     pub require_clean_worktree: bool,
     pub require_upstream: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SensitiveConfig {
+    pub patterns: Vec<String>,
+}
+
+impl Default for SensitiveConfig {
+    fn default() -> Self {
+        Self {
+            patterns: crate::sensitive::default_patterns(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HooksConfig {
+    pub protected_branches: Vec<String>,
+}
+
+impl Default for HooksConfig {
+    fn default() -> Self {
+        Self {
+            protected_branches: vec!["main".to_string(), "master".to_string()],
+        }
+    }
 }
 
 pub fn load_config(path: &Path) -> Result<Config> {
@@ -45,6 +75,8 @@ pub fn default_config() -> Config {
             require_clean_worktree: true,
             require_upstream: true,
         },
+        sensitive: SensitiveConfig::default(),
+        hooks: HooksConfig::default(),
     }
 }
 
@@ -59,6 +91,8 @@ mod tests {
         assert!(cfg.checks.require_clean_worktree);
         assert!(cfg.checks.require_upstream);
         assert!(!cfg.branches.pattern.is_empty());
+        assert!(!cfg.sensitive.patterns.is_empty());
+        assert!(cfg.hooks.protected_branches.contains(&"main".to_string()));
     }
 
     #[test]
@@ -79,6 +113,29 @@ require_upstream = false
         assert_eq!(cfg.commits.convention, "conventional");
         assert!(!cfg.checks.require_clean_worktree);
         assert!(!cfg.checks.require_upstream);
+        // defaults kick in
+        assert!(!cfg.sensitive.patterns.is_empty());
+        assert!(!cfg.hooks.protected_branches.is_empty());
+    }
+
+    #[test]
+    fn custom_sensitive_patterns() {
+        let toml_str = r#"
+[branches]
+pattern = "^main$"
+
+[commits]
+convention = "conventional"
+
+[checks]
+require_clean_worktree = false
+require_upstream = false
+
+[sensitive]
+patterns = ["*.secret"]
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.sensitive.patterns, vec!["*.secret"]);
     }
 
     #[test]

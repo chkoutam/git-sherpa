@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use colored::Colorize;
 use regex::Regex;
 use serde::Serialize;
 use std::path::Path;
@@ -6,12 +7,14 @@ use std::path::Path;
 use crate::cli::OutputFormat;
 use crate::config::{load_config, Config};
 use crate::git;
+use crate::sensitive;
 
 #[derive(Debug, Serialize)]
 pub struct Report {
     pub branch: BranchReport,
     pub commits: Vec<CommitReport>,
     pub repo: RepoReport,
+    pub sensitive: SensitiveReport,
     pub summary: Summary,
 }
 
@@ -36,12 +39,18 @@ pub struct Summary {
     pub branch_valid: bool,
     pub worktree_clean: bool,
     pub upstream_set: bool,
+    pub sensitive_files: usize,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RepoReport {
     pub worktree_clean: bool,
     pub upstream_set: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SensitiveReport {
+    pub files: Vec<String>,
 }
 
 pub fn check(config_path: &Path, format: OutputFormat, commit_limit: usize) -> Result<()> {
@@ -56,7 +65,8 @@ pub fn check(config_path: &Path, format: OutputFormat, commit_limit: usize) -> R
     let has_violations = !report.summary.branch_valid
         || report.summary.invalid_commits > 0
         || !report.summary.worktree_clean
-        || !report.summary.upstream_set;
+        || !report.summary.upstream_set
+        || report.summary.sensitive_files > 0;
 
     if has_violations {
         std::process::exit(1);
@@ -88,6 +98,9 @@ pub fn build_report(config: &Config, commit_limit: usize) -> Result<Report> {
     let invalid_commits = commit_reports.iter().filter(|c| !c.valid).count();
     let total_commits = commit_reports.len();
 
+    let staged = git::staged_files().unwrap_or_default();
+    let sensitive_files = sensitive::check_sensitive_files(&staged, &config.sensitive.patterns);
+
     Ok(Report {
         branch: BranchReport {
             name: branch_name,
@@ -99,40 +112,73 @@ pub fn build_report(config: &Config, commit_limit: usize) -> Result<Report> {
             worktree_clean,
             upstream_set,
         },
+        sensitive: SensitiveReport {
+            files: sensitive_files.clone(),
+        },
         summary: Summary {
             total_commits,
             invalid_commits,
             branch_valid,
             worktree_clean,
             upstream_set,
+            sensitive_files: sensitive_files.len(),
         },
     })
 }
 
 fn print_text_report(report: &Report) {
+    let status = |ok: bool| -> String {
+        if ok {
+            "OK".green().to_string()
+        } else {
+            "INVALID".red().to_string()
+        }
+    };
+
     println!("Branch: {}", report.branch.name);
     println!("Pattern: {}", report.branch.pattern);
-    println!("Branch OK: {}", report.branch.valid);
+    println!("Branch: {}", status(report.branch.valid));
 
     println!("\nCommits:");
     for commit in &report.commits {
-        println!(
-            "- {} {} [{}]",
-            commit.hash,
-            commit.message,
-            if commit.valid { "OK" } else { "INVALID" }
-        );
+        let tag = if commit.valid {
+            "OK".green().to_string()
+        } else {
+            "INVALID".red().to_string()
+        };
+        println!("- {} {} [{}]", &commit.hash[..8], commit.message, tag);
     }
 
     println!(
         "\nRepo: worktree_clean={}, upstream_set={}",
-        report.repo.worktree_clean, report.repo.upstream_set
+        status(report.repo.worktree_clean),
+        status(report.repo.upstream_set)
     );
 
-    println!(
-        "Summary: branch_ok={}, invalid_commits={}",
-        report.summary.branch_valid, report.summary.invalid_commits
-    );
+    if !report.sensitive.files.is_empty() {
+        println!("\n{}", "Sensitive files staged:".red().bold());
+        for f in &report.sensitive.files {
+            println!("  - {}", f.red());
+        }
+    }
+
+    let all_ok = report.summary.branch_valid
+        && report.summary.invalid_commits == 0
+        && report.summary.worktree_clean
+        && report.summary.upstream_set
+        && report.summary.sensitive_files == 0;
+
+    let summary_label = if all_ok {
+        "Summary: ALL OK".green().bold().to_string()
+    } else {
+        format!(
+            "Summary: branch_ok={}, invalid_commits={}, sensitive_files={}",
+            status(report.summary.branch_valid),
+            report.summary.invalid_commits,
+            report.summary.sensitive_files
+        )
+    };
+    println!("\n{}", summary_label);
 }
 
 fn print_json_report(report: &Report) -> Result<()> {

@@ -71,3 +71,26 @@ pub fn hooks_dir() -> Result<PathBuf> {
     let git_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(PathBuf::from(git_dir).join("hooks"))
 }
+
+pub fn staged_files() -> Result<Vec<String>> {
+    let output = Command::new("git")
+        .args(["diff", "--cached", "--name-only"])
+        .output()
+        .context("git diff --cached")?;
+    if !output.status.success() {
+        bail!("Failed to list staged files");
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.lines().map(|l| l.to_string()).collect())
+}
+
+pub fn push_set_upstream(branch: &str) -> Result<()> {
+    let status = Command::new("git")
+        .args(["push", "-u", "origin", branch])
+        .status()
+        .context("git push -u origin")?;
+    if !status.success() {
+        bail!("Failed to push and set upstream for branch '{}'", branch);
+    }
+    Ok(())
+}

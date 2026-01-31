@@ -32,6 +32,9 @@ pub enum Commands {
         config: PathBuf,
         #[arg(long, default_value_t = 20)]
         commit_limit: usize,
+        /// Automatically apply safe fixes (e.g. set upstream)
+        #[arg(long)]
+        apply: bool,
     },
     /// Manage git hooks
     Hooks {

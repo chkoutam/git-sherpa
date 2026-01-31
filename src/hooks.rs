@@ -12,14 +12,51 @@ pub(crate) fn hook_content() -> String {
     format!("#!/bin/sh\n{}\nexec git-sherpa check\n", HOOK_MARKER)
 }
 
-pub fn install(force: bool) -> Result<()> {
+pub(crate) fn pre_push_hook_content(protected_branches: &[String]) -> String {
+    let branches_list = protected_branches.join("|");
+    format!(
+        r#"#!/bin/sh
+{marker}
+
+# Block force push
+for arg in "$@"; do
+    case "$arg" in
+        --force|-f|--force-with-lease)
+            echo "git-sherpa: force push is blocked."
+            exit 1
+            ;;
+    esac
+done
+
+# Block push to protected branches
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+case "$current_branch" in
+    {branches})
+        echo "git-sherpa: direct push to '$current_branch' is blocked. Use a pull request."
+        exit 1
+        ;;
+esac
+
+exec git-sherpa check
+"#,
+        marker = HOOK_MARKER,
+        branches = branches_list,
+    )
+}
+
+pub fn install_with_config(force: bool, protected_branches: &[String]) -> Result<()> {
     let hooks_dir = git::hooks_dir()?;
     fs::create_dir_all(&hooks_dir)?;
 
-    let content = hook_content();
-    let hook_names = ["pre-commit", "pre-push"];
+    let pre_commit_content = hook_content();
+    let pre_push_content = pre_push_hook_content(protected_branches);
 
-    for name in &hook_names {
+    let hooks: [(&str, &str); 2] = [
+        ("pre-commit", &pre_commit_content),
+        ("pre-push", &pre_push_content),
+    ];
+
+    for (name, content) in &hooks {
         let path = hooks_dir.join(name);
         if path.exists() && !force {
             eprintln!(
@@ -28,7 +65,7 @@ pub fn install(force: bool) -> Result<()> {
             );
             continue;
         }
-        fs::write(&path, &content)
+        fs::write(&path, content)
             .with_context(|| format!("write hook {}", path.display()))?;
         #[cfg(unix)]
         {
@@ -84,5 +121,19 @@ mod tests {
     #[test]
     fn hook_content_has_exec() {
         assert!(hook_content().contains("exec git-sherpa check"));
+    }
+
+    #[test]
+    fn pre_push_blocks_protected_branches() {
+        let content = pre_push_hook_content(&["main".into(), "master".into()]);
+        assert!(content.contains("main|master"));
+        assert!(content.contains("force push is blocked"));
+        assert!(content.contains("direct push to"));
+    }
+
+    #[test]
+    fn pre_push_has_marker() {
+        let content = pre_push_hook_content(&["main".into()]);
+        assert!(content.contains(HOOK_MARKER));
     }
 }

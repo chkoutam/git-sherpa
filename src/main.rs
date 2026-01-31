@@ -4,6 +4,7 @@ mod config;
 mod fix;
 mod git;
 mod hooks;
+mod sensitive;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -26,9 +27,18 @@ fn main() -> Result<()> {
         Commands::Fix {
             config,
             commit_limit,
-        } => fix::fix(&config, commit_limit),
+            apply,
+        } => fix::fix(&config, commit_limit, apply),
         Commands::Hooks { action } => match action {
-            HooksAction::Install { force } => hooks::install(force),
+            HooksAction::Install { force } => {
+                let config_path = std::path::Path::new(cli::DEFAULT_CONFIG_PATH);
+                let cfg = if config_path.exists() {
+                    config::load_config(config_path).unwrap_or_else(|_| default_config())
+                } else {
+                    default_config()
+                };
+                hooks::install_with_config(force, &cfg.hooks.protected_branches)
+            }
             HooksAction::Uninstall => hooks::uninstall(),
         },
     }
