@@ -78,6 +78,22 @@ require_upstream = true
 
 ## Roadmap
 
-- Providers: GitHub + GitLab adapters
-- PR stacking mode
-- CI integration
+### Done
+
+- [x] Colored terminal output (check & fix)
+- [x] `fix --apply` auto-execution for safe fixes (set upstream)
+- [x] Sensitive file detection (`.env`, `*.pem`, `*.key`, etc.)
+- [x] Enhanced pre-push hook (block force push + protected branches)
+- [x] Configurable `[sensitive]` and `[hooks]` sections
+
+### To do
+
+- [ ] **Providers** — GitHub + GitLab API adapters (PR status, merge checks)
+- [ ] **PR stacking mode** — manage dependent PRs as a stack
+- [ ] **CI integration** — GitHub Actions reusable workflow / GitLab CI template
+- [ ] **Interactive fix mode** — prompt-based selection of fixes to apply (`fix -i`)
+- [ ] **Config inheritance** — global `~/.gitsherpa.toml` merged with per-repo config
+- [ ] **Custom commit conventions** — user-defined regex in config instead of `"conventional"` only
+- [ ] **Monorepo support** — per-directory rules and scoped checks
+- [ ] **Hook customization** — allow user scripts to run alongside git-sherpa hooks
+- [ ] **Publish to crates.io** — `cargo install git-sherpa`
