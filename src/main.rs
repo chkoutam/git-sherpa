@@ -245,6 +245,7 @@ fn build_report(config: &Config, commit_limit: usize) -> Result<Report> {
         .collect();
 
     let invalid_commits = commit_reports.iter().filter(|c| !c.valid).count();
+    let total_commits = commit_reports.len();
 
     Ok(Report {
         branch: BranchReport {
@@ -258,7 +259,7 @@ fn build_report(config: &Config, commit_limit: usize) -> Result<Report> {
             upstream_set,
         },
         summary: Summary {
-            total_commits: commit_reports.len(),
+            total_commits,
             invalid_commits,
             branch_valid,
             worktree_clean,
