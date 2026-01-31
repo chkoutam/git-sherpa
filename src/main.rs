@@ -6,6 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 const DEFAULT_CONFIG_PATH: &str = ".gitsherpa.toml";
 
 #[derive(Parser)]
@@ -38,6 +41,23 @@ enum Commands {
         #[arg(long, default_value_t = 20)]
         commit_limit: usize,
     },
+    /// Manage git hooks
+    Hooks {
+        #[command(subcommand)]
+        action: HooksAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum HooksAction {
+    /// Install pre-commit and pre-push hooks
+    Install {
+        /// Overwrite existing hooks
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove hooks installed by git-sherpa
+    Uninstall,
 }
 
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -120,6 +140,10 @@ fn main() -> Result<()> {
             config,
             commit_limit,
         } => fix(&config, commit_limit),
+        Commands::Hooks { action } => match action {
+            HooksAction::Install { force } => hooks_install(force),
+            HooksAction::Uninstall => hooks_uninstall(),
+        },
     }
 }
 
@@ -147,6 +171,15 @@ fn check(config_path: &Path, format: OutputFormat, commit_limit: usize) -> Resul
     match format {
         OutputFormat::Text => print_text_report(&report),
         OutputFormat::Json => print_json_report(&report)?,
+    }
+
+    let has_violations = !report.summary.branch_valid
+        || report.summary.invalid_commits > 0
+        || !report.summary.worktree_clean
+        || !report.summary.upstream_set;
+
+    if has_violations {
+        std::process::exit(1);
     }
 
     Ok(())
@@ -358,4 +391,80 @@ fn git_has_upstream() -> Result<bool> {
         .output()
         .context("git upstream")?;
     Ok(output.status.success())
+}
+
+const HOOK_MARKER: &str = "# git-sherpa";
+
+fn hook_content() -> String {
+    format!(
+        "#!/bin/sh\n{}\nexec git-sherpa check\n",
+        HOOK_MARKER
+    )
+}
+
+fn git_hooks_dir() -> Result<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-dir"])
+        .output()
+        .context("git rev-parse --git-dir")?;
+    if !output.status.success() {
+        bail!("Not a git repository");
+    }
+    let git_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(PathBuf::from(git_dir).join("hooks"))
+}
+
+fn hooks_install(force: bool) -> Result<()> {
+    let hooks_dir = git_hooks_dir()?;
+    fs::create_dir_all(&hooks_dir)?;
+
+    let content = hook_content();
+    let hook_names = ["pre-commit", "pre-push"];
+
+    for name in &hook_names {
+        let path = hooks_dir.join(name);
+        if path.exists() && !force {
+            eprintln!(
+                "Warning: {} already exists, skipping (use --force to overwrite)",
+                path.display()
+            );
+            continue;
+        }
+        fs::write(&path, &content)
+            .with_context(|| format!("write hook {}", path.display()))?;
+        #[cfg(unix)]
+        {
+            let perms = fs::Permissions::from_mode(0o755);
+            fs::set_permissions(&path, perms)
+                .with_context(|| format!("chmod {}", path.display()))?;
+        }
+        println!("Installed {}", path.display());
+    }
+
+    Ok(())
+}
+
+fn hooks_uninstall() -> Result<()> {
+    let hooks_dir = git_hooks_dir()?;
+    let hook_names = ["pre-commit", "pre-push"];
+
+    for name in &hook_names {
+        let path = hooks_dir.join(name);
+        if !path.exists() {
+            continue;
+        }
+        let content = fs::read_to_string(&path).unwrap_or_default();
+        if !content.contains(HOOK_MARKER) {
+            eprintln!(
+                "Warning: {} was not installed by git-sherpa, skipping",
+                path.display()
+            );
+            continue;
+        }
+        fs::remove_file(&path)
+            .with_context(|| format!("remove hook {}", path.display()))?;
+        println!("Removed {}", path.display());
+    }
+
+    Ok(())
 }
